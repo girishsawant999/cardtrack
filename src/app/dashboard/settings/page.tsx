@@ -14,6 +14,7 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { AccountActions } from "@/components/settings/account-actions";
 import { getCurrentUser, getProfile } from "@/lib/data";
 import { getInitials } from "@/lib/utils";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -35,19 +36,13 @@ export default async function SettingsPage() {
 
   const settingGroups = [
     {
-      title: "Account",
+      title: "Account & Data",
       items: [
-        {
-          icon: User,
-          label: "Profile",
-          subtitle: email,
-          href: "/dashboard/settings/profile",
-        },
         {
           icon: Mail,
           label: "Gmail Connection",
           subtitle: profile?.gmail_connected
-            ? `Connected • Last fetched ${lastFetched}`
+            ? `Last fetched ${lastFetched}`
             : "Not connected — sign in with Google to enable",
           href: "/dashboard/settings/gmail",
           badge: profile?.gmail_connected ? "Connected" : "Pending",
@@ -80,17 +75,6 @@ export default async function SettingsPage() {
         },
       ],
     },
-    {
-      title: "Security",
-      items: [
-        {
-          icon: Shield,
-          label: "Privacy & Data",
-          subtitle: "How we handle your email data",
-          href: "/privacy",
-        },
-      ],
-    },
   ];
 
   return (
@@ -113,9 +97,12 @@ export default async function SettingsPage() {
         <Card className="surface-glass-card border-0 p-5 relative overflow-hidden">
           <div className="absolute -top-12 -right-12 w-36 h-36 rounded-full bg-primary/10 blur-2xl" aria-hidden />
           <div className="relative flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-brand-gradient flex items-center justify-center text-primary-foreground font-extrabold text-2xl ">
-              {getInitials(displayName)}
-            </div>
+            <Avatar size="lg" className="w-16 h-16">
+              {profile?.avatar_url ? (
+                <AvatarImage src={profile.avatar_url} alt={displayName} />
+              ) : null}
+              <AvatarFallback>{getInitials(displayName)}</AvatarFallback>
+            </Avatar>
             <div className="flex-1 min-w-0">
               <p className="text-lg font-bold text-foreground truncate tracking-tight">
                 {displayName}
@@ -185,7 +172,9 @@ export default async function SettingsPage() {
           ))}
         </div>
 
-        <AccountActions />
+        <div>
+          <AccountActions />
+        </div>
       </div>
     </div>
   );
