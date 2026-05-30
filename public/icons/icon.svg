@@ -1,0 +1,34 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7c6df0"/>
+      <stop offset="1" stop-color="#a89cf7"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="512" height="512">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#6a5cc0" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bgGradient)"/>
+  <g filter="url(#shadow)">
+    <!-- Improved credit card shape -->
+    <rect x="104" y="152" width="304" height="208" rx="28" fill="#fff" stroke="#e5e1fa" stroke-width="4"/>
+    <!-- Card chip -->
+    <rect x="132" y="192" width="44" height="28" rx="7" fill="#e5e1fa"/>
+    <rect x="140" y="200" width="28" height="12" rx="3" fill="#d1c4f7"/>
+    <!-- Card number lines -->
+    <rect x="190" y="210" width="140" height="10" rx="5" fill="#e5e1fa"/>
+    <rect x="190" y="228" width="100" height="8" rx="4" fill="#e5e1fa"/>
+    <!-- Name line -->
+    <rect x="190" y="252" width="80" height="8" rx="4" fill="#e5e1fa"/>
+    <!-- Expiry line -->
+    <rect x="280" y="252" width="40" height="8" rx="4" fill="#e5e1fa"/>
+    <!-- Subtle card logo (2 circles) -->
+    <circle cx="150" cy="300" r="10" fill="#e5e1fa"/>
+    <circle cx="165" cy="300" r="10" fill="#d1c4f7" fill-opacity="0.7"/>
+    <!-- Circle with white checkmark at bottom right corner of card -->
+    <g>
+      <circle cx="380" cy="320" r="18" fill="#22c55e" stroke="#fff" stroke-width="3"/>
+      <path d="M372 320l6 6 12-12" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </g>
+  </g>
+</svg>
