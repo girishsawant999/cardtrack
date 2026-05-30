@@ -1,8 +1,34 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, CreditCard, Receipt, Settings } from "lucide-react";
+
+function LinkProgress({ active }: { active: boolean }) {
+  const { pending } = useLinkStatus();
+  if (!pending) return null;
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-[3px] h-[2px] w-8 overflow-hidden rounded-full"
+      style={{
+        backgroundColor: active
+          ? "color-mix(in oklab, var(--primary-foreground) 25%, transparent)"
+          : "color-mix(in oklab, var(--muted-foreground) 18%, transparent)",
+      }}
+    >
+      <span
+        className="block h-full w-1/2 rounded-full"
+        style={{
+          backgroundColor: active
+            ? "var(--primary-foreground)"
+            : "var(--primary)",
+          animation: "nav-progress 900ms cubic-bezier(0.4, 0, 0.2, 1) infinite",
+        }}
+      />
+    </span>
+  );
+}
 
 const navItems = [
   { href: "/dashboard", label: "Home", icon: Home },
@@ -74,6 +100,7 @@ export function BottomNav() {
               >
                 {item.label}
               </span>
+              <LinkProgress active={isActive} />
             </Link>
           );
         })}

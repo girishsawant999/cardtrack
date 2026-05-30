@@ -20,7 +20,6 @@ Local tools:
 2. pnpm 9+
 3. Supabase CLI — `brew install supabase/tap/supabase`
 4. Git
-5. Deno (only required if you want to run Edge Functions locally) — `brew install deno`
 
 Verify:
 ```bash
@@ -102,7 +101,7 @@ In Authentication → URL Configuration:
 
 1. Open Google AI Studio → Get API key.
 2. Create a key in the same Google Cloud project (recommended).
-3. Save the key — used as `GEMINI_API_KEY` in Supabase Edge Function secrets.
+3. Save the key — used as `GEMINI_API_KEY` in the Next.js hosting environment.
 
 ---
 
@@ -121,7 +120,13 @@ NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
+GOOGLE_CLIENT_ID=YOUR_GOOGLE_OAUTH_CLIENT_ID
+GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_OAUTH_CLIENT_SECRET
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+CRON_SECRET=any-long-random-string
 ```
+
+Generate a `CRON_SECRET` with `openssl rand -hex 32`. The same value must later be stored in Supabase Vault (see §8) so `pg_cron` can authenticate.
 
 Run locally to verify:
 ```bash
@@ -153,131 +158,73 @@ Verify in Table Editor that the tables exist and RLS is enabled (lock icon) on e
 
 ---
 
-## 7. Deploy Supabase Edge Functions
+## 7. Email fetching architecture
 
-The app ships two functions under `supabase/functions/`:
+Gmail polling and Gemini parsing now live inside this Next.js app, not in Supabase Edge Functions. The Route Handler at `src/app/api/cron/fetch-emails/route.ts`:
 
-1. `fetch-emails` — Triggered by pg_cron (and the in-app Settings button) to scan Gmail for statement emails.
-2. `parse-statement` — Called by `fetch-emails` per email; uses Gemini to extract bill details and upsert into `bills`.
+1. Validates an `Authorization: Bearer ${CRON_SECRET}` header.
+2. Loads every `profiles` row with `gmail_connected = true` (or a single user when `{ user_id }` is posted from the in-app "Fetch now" button).
+3. Refreshes each user's Gmail OAuth token, lists statement-like messages, and for each new message calls Gemini and upserts into `bills` / `notifications`.
 
-### 7.1 Authenticate and link the Supabase CLI
+There is nothing to deploy to Supabase — code ships with the Next.js app (§10). The only Supabase work is enabling `pg_cron` + `pg_net` and scheduling the job (§8).
+
+### 7.1 Smoke test the route locally
 ```bash
-supabase login            # opens browser to authenticate
-supabase link --project-ref YOUR_PROJECT_REF
-```
-
-### 7.2 Set Edge Function secrets
-These secrets are read inside the function code as `Deno.env.get(...)`.
-
-```bash
-supabase secrets set \
-  GEMINI_API_KEY=your-gemini-api-key \
-  SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co \
-  SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-```
-
-List them to confirm:
-```bash
-supabase secrets list
-```
-
-### 7.3 Deploy each function
-```bash
-supabase functions deploy fetch-emails
-supabase functions deploy parse-statement
-```
-
-Each command:
-- Bundles the Deno code under `supabase/functions/<name>/index.ts`
-- Uploads it to your Supabase project
-- Makes it available at `https://YOUR_PROJECT_REF.supabase.co/functions/v1/<name>`
-
-If you want functions to be invokable without a JWT (not recommended for these), append `--no-verify-jwt`. We do NOT use that here — we always pass `Authorization: Bearer <key>`.
-
-### 7.4 Verify deployment
-```bash
-supabase functions list
-```
-Both functions should show as deployed with a recent timestamp.
-
-Also visible in Supabase Dashboard → Edge Functions.
-
-### 7.5 Tail logs while testing
-```bash
-supabase functions logs fetch-emails --tail
-supabase functions logs parse-statement --tail
-```
-
-### 7.6 Smoke test `parse-statement`
-```bash
-curl -X POST "https://YOUR_PROJECT_REF.supabase.co/functions/v1/parse-statement" \
-  -H "Authorization: Bearer YOUR_ANON_KEY" \
+pnpm dev
+curl -X POST http://localhost:3000/api/cron/fetch-emails \
+  -H "Authorization: Bearer $CRON_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "00000000-0000-0000-0000-000000000000",
-    "email_body": "test",
-    "gmail_message_id": "smoke-test-1",
-    "subject": "Test",
-    "sender": "test@example.com",
-    "received_at": "2026-01-01T00:00:00Z"
-  }'
+  -d '{}'
 ```
-You should receive a JSON response. For a non-statement payload it will say `"Not a credit card statement"`. Errors typically indicate a missing `GEMINI_API_KEY`.
-
-### 7.7 Smoke test `fetch-emails`
-```bash
-curl -X POST "https://YOUR_PROJECT_REF.supabase.co/functions/v1/fetch-emails" \
-  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY"
-```
-Watch the tail logs in another terminal. You should see it iterate users and exit cleanly.
-
-### 7.8 Re-deploying after code changes
-After editing files under `supabase/functions/<name>/index.ts`:
-```bash
-supabase functions deploy <name>
-```
-
-### 7.9 Optional: run a function locally
-```bash
-supabase functions serve parse-statement --env-file ./supabase/.env.local
-```
-Create `supabase/.env.local` containing `GEMINI_API_KEY=...`, `SUPABASE_URL=...`, `SUPABASE_SERVICE_ROLE_KEY=...` (this file MUST NOT be committed).
+Expected: `{"success":true,"results":[...]}`. Without the header you should get a `401`.
 
 ---
 
-## 8. Schedule the cron job (pg_cron)
+## 8. Schedule the cron job (pg_cron + Vault)
 
-In Supabase Dashboard → SQL Editor, run once:
+In Supabase Dashboard → SQL Editor, run **once** to store the app URL and shared secret in Vault:
 
 ```sql
-create extension if not exists pg_cron;
-create extension if not exists pg_net;
+select vault.create_secret(
+  'https://your-production-domain.com/api/cron/fetch-emails',
+  'cron_app_url',
+  'Public URL of the Next.js cron endpoint'
+);
 
-select cron.schedule(
-  'fetch-emails',
-  '0 */6 * * *',
-  $$
-  select net.http_post(
-    url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/fetch-emails',
-    headers := jsonb_build_object(
-      'Authorization', 'Bearer YOUR_SERVICE_ROLE_KEY',
-      'Content-Type', 'application/json'
-    ),
-    body := '{}'::jsonb
-  )
-  $$
+select vault.create_secret(
+  'PASTE_THE_SAME_VALUE_AS_CRON_SECRET_ENV',
+  'cron_secret',
+  'Shared bearer token for the Next.js cron endpoint'
 );
 ```
 
-Verify:
-```sql
-select * from cron.job;
-select * from cron.job_run_details order by start_time desc limit 5;
+Then apply the new migration (or paste `supabase/migrations/003_cron_fetch_emails.sql` into the SQL editor):
+
+```bash
+supabase db push
 ```
 
-To remove later:
+It enables `pg_cron` + `pg_net` and schedules `fetch-emails-daily` to POST the Next.js route every day at 03:00 UTC, reading both the URL and bearer secret from Vault.
+
+Verify:
 ```sql
-select cron.unschedule('fetch-emails');
+select * from cron.job where jobname = 'fetch-emails-daily';
+select * from cron.job_run_details order by start_time desc limit 5;
+select status_code, content::text from net._http_response order by created desc limit 5;
+```
+
+To update the URL or rotate the secret later:
+```sql
+select vault.update_secret(
+  (select id from vault.decrypted_secrets where name = 'cron_secret'),
+  'NEW_SECRET_VALUE'
+);
+```
+Also update `CRON_SECRET` in the hosting env at the same time.
+
+To remove the job entirely:
+```sql
+select cron.unschedule('fetch-emails-daily');
 ```
 
 ---
@@ -303,7 +250,11 @@ Do NOT commit `.env.local`. It is already gitignored by Next.js defaults — ver
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `NEXT_PUBLIC_APP_URL` (your Vercel domain, e.g. `https://cardtrack.vercel.app`)
-   - `SUPABASE_SERVICE_ROLE_KEY` (server-only; required for the in-app "Fetch now" button)
+   - `SUPABASE_SERVICE_ROLE_KEY` (server-only; used by `/api/cron/fetch-emails`)
+   - `GOOGLE_CLIENT_ID` (server-only; refresh-token exchange)
+   - `GOOGLE_CLIENT_SECRET` (server-only; refresh-token exchange)
+   - `GEMINI_API_KEY` (server-only; statement parsing)
+   - `CRON_SECRET` (server-only; must equal the Vault secret of the same name)
 5. Click Deploy.
 
 After deploy:
@@ -322,12 +273,12 @@ After deploy:
 5. Table Editor → `profiles` — confirm a profile row was auto-created by the `handle_new_user` trigger.
 6. Add a card via the UI and confirm it appears in `credit_cards`.
 7. Settings → "Fetch statement emails now" — confirm it returns a success message and check `email_log` for new rows.
-8. Manually re-invoke the cron function:
+8. Manually re-invoke the cron route:
    ```bash
-   curl -X POST "https://YOUR_PROJECT_REF.supabase.co/functions/v1/fetch-emails" \
-     -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY"
+   curl -X POST "https://your-production-domain.com/api/cron/fetch-emails" \
+     -H "Authorization: Bearer $CRON_SECRET"
    ```
-   Check Edge Function logs in the Supabase Dashboard.
+   Check your Next.js host's logs (e.g. Vercel → Deployments → Functions).
 
 ---
 
@@ -345,8 +296,8 @@ After deploy:
 1. Move OAuth consent screen from Testing → In Production in Google Cloud (required for non-test users). Triggers Google verification because of the sensitive `gmail.readonly` scope.
 2. Set up Supabase database backups (Project Settings → Database → Backups).
 3. Enable Vercel Analytics or your preferred RUM.
-4. Add monitoring/alerts on Edge Function errors (Supabase Logs Explorer + an uptime monitor against the function URL).
-5. Rotate the service role key if it was ever exposed.
+4. Add monitoring/alerts on `/api/cron/fetch-emails` errors (your host's log explorer + an uptime monitor against the route).
+5. Rotate the service role key and `CRON_SECRET` if either was ever exposed (remember to update Vault for `CRON_SECRET`).
 
 ---
 
@@ -354,13 +305,14 @@ After deploy:
 
 | Item | Where used |
 |---|---|
-| Supabase Project URL | Client + Edge Functions |
+| Supabase Project URL | Client + Next.js server |
 | Supabase anon key | Client |
-| Supabase service role key | Edge Functions + pg_cron header + Next.js server (`/api/trigger-fetch`) |
-| Google OAuth Client ID | Supabase Auth provider config |
-| Google OAuth Client Secret | Supabase Auth provider config |
-| Gemini API key | Edge Function secret |
-| Production domain | Supabase Auth + Vercel env |
+| Supabase service role key | Next.js server (`/api/cron/fetch-emails`) |
+| Google OAuth Client ID | Supabase Auth provider config + Next.js server (refresh-token exchange) |
+| Google OAuth Client Secret | Supabase Auth provider config + Next.js server (refresh-token exchange) |
+| Gemini API key | Next.js server (`/api/cron/fetch-emails`) |
+| `CRON_SECRET` | Next.js server env + Supabase Vault (`cron_secret`) |
+| Production domain | Supabase Auth + Vercel env + Supabase Vault (`cron_app_url`) |
 
 Store these in a password manager. Never commit them to git.
 
@@ -371,9 +323,9 @@ Store these in a password manager. Never commit them to git.
 1. "Invalid supabaseUrl" at build time → `NEXT_PUBLIC_SUPABASE_URL` missing in Vercel env. Add it and redeploy.
 2. Google login loops back to `/login` → Site URL / Redirect URLs misconfigured in Supabase or Google OAuth client.
 3. Gmail scope not granted → OAuth consent screen scopes not saved, or user did not approve. Re-run OAuth with `prompt=consent`.
-4. Edge Function 401 → wrong Authorization bearer (use `service_role` for cron and the in-app fetch button, `anon` for user-invoked calls).
-5. pg_cron job not firing → `pg_cron` / `pg_net` extensions not enabled, or job not visible in `cron.job` table.
-6. "Fetch statement emails now" returns a server error → `SUPABASE_SERVICE_ROLE_KEY` not set in your hosting environment.
+4. `/api/cron/fetch-emails` 401 → `CRON_SECRET` env missing or doesn't match the bearer in the request / Vault secret.
+5. pg_cron job not firing → `pg_cron` / `pg_net` extensions not enabled, job not visible in `cron.job` table, or Vault secrets `cron_app_url` / `cron_secret` missing (check `net._http_response` for the last response body).
+6. "Fetch statement emails now" returns a server error → `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_CLIENT_ID/SECRET`, or `GEMINI_API_KEY` not set in your hosting environment.
 7. Bills not appearing → check `email_log` table for `processing_status` and `processing_result` JSON for the failure reason.
 
 ---

@@ -63,9 +63,11 @@ graph TB
     subgraph "Supabase Backend"
         I[Supabase Auth<br/>Google OAuth Provider]
         J[(PostgreSQL DB<br/>Cards, Bills, Users)]
-        K[Edge Function<br/>fetch-emails]
-        L[Edge Function<br/>parse-statement]
-        M[pg_cron<br/>Scheduled Trigger]
+        M[pg_cron + pg_net<br/>Daily 03:00 UTC]
+    end
+
+    subgraph "Next.js Server"
+        K[Route Handler<br/>/api/cron/fetch-emails]
     end
 
     subgraph "External Services"
@@ -75,11 +77,10 @@ graph TB
 
     F -->|OAuth + gmail.readonly| I
     I -->|provider_token| K
-    M -->|Every 6 hours| K
+    M -->|HTTP POST + CRON_SECRET| K
     K -->|Fetch emails| N
-    K -->|Email body| L
-    L -->|Parse & extract| O
-    L -->|Structured JSON| J
+    K -->|Email body| O
+    K -->|Structured JSON| J
     A <-->|Real-time subscriptions| J
 ```
 
@@ -93,8 +94,8 @@ graph TB
 | Styling | Tailwind CSS v4 + CSS custom properties for theming |
 | Auth | Supabase Auth (Google OAuth w/ Gmail scope) |
 | Database | Supabase PostgreSQL + Row Level Security |
-| Backend Logic | Supabase Edge Functions (Deno) |
-| Scheduling | Supabase pg_cron |
+| Backend Logic | Next.js Route Handlers (Node runtime) |
+| Scheduling | Supabase pg_cron + pg_net |
 | AI Parsing | Google Gemini API (structured output) |
 | PWA | Serwist (service worker + caching) |
 | Fonts | Google Fonts — Inter (UI) + JetBrains Mono (numbers) |
