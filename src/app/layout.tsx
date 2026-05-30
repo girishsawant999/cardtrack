@@ -81,10 +81,30 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
+                var root = document.documentElement;
+                var meta = document.querySelector('meta[name="color-scheme"]');
                 var cs = localStorage.getItem('color-scheme');
-                if (cs) {
-                  document.documentElement.setAttribute('data-theme', cs);
-                  document.querySelector('meta[name="color-scheme"]').content = cs;
+                var theme;
+                if (cs === 'dark' || cs === 'light') {
+                  theme = cs;
+                  root.setAttribute('data-theme', cs);
+                  if (cs === 'dark') {
+                    root.classList.add('dark');
+                  } else {
+                    root.classList.remove('dark');
+                  }
+                  if (meta) meta.content = cs;
+                } else {
+                  // No pinned theme, use system
+                  var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  theme = systemDark ? 'dark' : 'light';
+                  if (systemDark) {
+                    root.classList.add('dark');
+                  } else {
+                    root.classList.remove('dark');
+                  }
+                  if (meta) meta.content = 'light dark';
+                  root.removeAttribute('data-theme');
                 }
               })();
             `,
