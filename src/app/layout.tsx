@@ -33,6 +33,10 @@ export const metadata: Metadata = {
   description:
     "Track your credit card bills effortlessly. Auto-detect statements from email, get due date reminders, and never miss a payment.",
   manifest: "/manifest.json",
+  icons: [
+    { rel: "icon", url: "/icons/icon.svg", type: "image/svg+xml" },
+    { rel: "apple-touch-icon", url: "/icons/icon-192x192.png" },
+  ],
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -86,7 +90,7 @@ export default function RootLayout({
             `,
           }}
         />
-        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+        {/* Icons are now handled by Next.js metadata */}
       </head>
       <body className="min-h-dvh bg-background text-foreground font-sans antialiased">
         <ThemeProvider>{children}</ThemeProvider>
