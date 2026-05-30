@@ -228,6 +228,42 @@ export interface Database {
         };
         Relationships: [];
       };
+      gmail_oauth_tokens: {
+        Row: {
+          user_id: string;
+          provider: string;
+          refresh_token: string | null;
+          access_token: string | null;
+          token_type: string | null;
+          scope: string | null;
+          expires_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          provider?: string;
+          refresh_token?: string | null;
+          access_token?: string | null;
+          token_type?: string | null;
+          scope?: string | null;
+          expires_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          provider?: string;
+          refresh_token?: string | null;
+          access_token?: string | null;
+          token_type?: string | null;
+          scope?: string | null;
+          expires_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -241,6 +277,12 @@ export type CreditCard = Database["public"]["Tables"]["credit_cards"]["Row"];
 export type Bill = Database["public"]["Tables"]["bills"]["Row"];
 export type Notification = Database["public"]["Tables"]["notifications"]["Row"];
 export type EmailLog = Database["public"]["Tables"]["email_log"]["Row"];
+export type GmailOAuthToken = Database["public"]["Tables"]["gmail_oauth_tokens"]["Row"];
+
+export type NotificationPreferences = {
+  due_date_reminder: boolean;
+  new_bill: boolean;
+};
 
 export type CreditCardInsert = Database["public"]["Tables"]["credit_cards"]["Insert"];
 export type BillInsert = Database["public"]["Tables"]["bills"]["Insert"];

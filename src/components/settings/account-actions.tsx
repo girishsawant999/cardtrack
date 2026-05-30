@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, LogOut, RefreshCw, Database } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { DeleteAccountPanel } from "@/components/settings/delete-account-panel";
 
 export function AccountActions() {
   const router = useRouter();
@@ -114,6 +115,8 @@ export function AccountActions() {
         )}
         Sign Out
       </button>
+
+      <DeleteAccountPanel />
     </div>
   );
 }
