@@ -73,11 +73,8 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <meta name="color-scheme" content="light dark" />
-        {/* Prevent FOUC: inline script to apply stored theme immediately */}
-        <Script
-          id="theme-script"
-          strategy="beforeInteractive"
+        {/* Prevent FOUC: raw script to apply theme before CSS loads */}
+        <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
@@ -110,6 +107,7 @@ export default function RootLayout({
             `,
           }}
         />
+        <meta name="color-scheme" content="light dark" />
         {/* Icons are now handled by Next.js metadata */}
       </head>
       <body className="min-h-dvh bg-background text-foreground font-sans antialiased">
