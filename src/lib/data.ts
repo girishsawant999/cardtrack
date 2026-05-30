@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { MOCK_CARDS, MOCK_BILLS, MOCK_NOTIFICATIONS } from "@/lib/mock-data";
 import type {
   Bill,
   BillWithCard,
@@ -118,7 +117,7 @@ export async function getCards(): Promise<CreditCard[]> {
     .order("created_at", { ascending: true });
     
   if (!data || data.length === 0) {
-    return MOCK_CARDS;
+    return [];
   }
   
   return (data as Record<string, unknown>[]).map(normalizeCard);
@@ -134,7 +133,7 @@ export async function getCardById(id: string): Promise<CreditCard | null> {
     .maybeSingle();
     
   if (!data) {
-    return MOCK_CARDS.find((c) => c.id === id) || null;
+    return null;
   }
   
   return normalizeCard(data as Record<string, unknown>);
@@ -149,7 +148,7 @@ export async function getBills(): Promise<BillWithCard[]> {
     .order("due_date", { ascending: true });
 
   if (!data || data.length === 0) {
-    return MOCK_BILLS;
+    return [];
   }
 
   return (data as Record<string, unknown>[]).map((row) => {
@@ -174,7 +173,7 @@ export async function getBillsForCard(cardId: string): Promise<Bill[]> {
     .order("statement_date", { ascending: false });
     
   if (!data || data.length === 0) {
-    return MOCK_BILLS.filter((b) => b.card_id === cardId);
+    return [];
   }
   
   return (data as Record<string, unknown>[]).map(normalizeBill);
@@ -190,7 +189,7 @@ export async function getNotifications(): Promise<Notification[]> {
     .limit(20);
     
   if (!data || data.length === 0) {
-    return MOCK_NOTIFICATIONS;
+    return [];
   }
   
   return data as Notification[];
