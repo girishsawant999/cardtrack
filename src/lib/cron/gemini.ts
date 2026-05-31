@@ -163,5 +163,6 @@ export async function parseEmailWithGemini(
   });
 
   const parsedText = response.text ?? "{}";
+  console.log(`[gemini] Raw response: ${parsedText}`);  
   return JSON.parse(parsedText) as ParsedStatement;
 }
