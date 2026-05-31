@@ -60,6 +60,24 @@ function extractRetryDelayMs(err: any): number | null {
   return null;
 }
 
+function stringifyError(err: any): string {
+  if (!err) return "Unknown error";
+  if (err instanceof Error) {
+    return err.stack || err.message;
+  }
+  if (typeof err === "object") {
+    if (err.message && err.code) {
+      return `Database Error [${err.code}]: ${err.message}${err.details ? ` (${err.details})` : ""}${err.hint ? ` - Hint: ${err.hint}` : ""}`;
+    }
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  }
+  return String(err);
+}
+
 export async function processQueue(
   admin: SupabaseClient<Database>,
   userId?: string
@@ -213,7 +231,7 @@ export async function processQueue(
     }
   } catch (err: any) {
     failedCount += 1;
-    const errMsg = err instanceof Error ? err.message : String(err);
+    const errMsg = stringifyError(err);
     console.error(`[process-queue] Failed processing item ${locked.id} after all attempts:`, errMsg);
 
     const newRetries = (locked.retries ?? 0) + 1;

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/types/database";
-import { parseEmailWithGemini, type ParsedStatement } from "./gemini";
+import { parseEmail } from "./ai-provider";
+import { type ParsedStatement } from "./gemini";
 
 export interface ParseInput {
   user_id: string;
@@ -38,13 +39,14 @@ export async function processEmail(
 
   const { data: profile } = await admin
     .from("profiles")
-    .select("pdf_passwords")
+    .select("pdf_passwords, ai_provider")
     .eq("id", user_id)
     .maybeSingle();
 
   const pdfPasswords = profile?.pdf_passwords ?? [];
+  const aiProvider = (profile as any)?.ai_provider ?? "gemini";
 
-  const parsed = await parseEmailWithGemini(email_body, pdfAttachments, pdfPasswords);
+  const parsed = await parseEmail(email_body, pdfAttachments, pdfPasswords, aiProvider);
 
   // Gemini API call succeeded. Now upsert the email log.
   await admin.from("email_log").upsert(
@@ -66,12 +68,57 @@ export async function processEmail(
     return { success: true, message: "Not a credit card statement", parsed };
   }
 
+  // Normalize bank name & card last four
+  const bankName = parsed.bank_name?.trim() || "UNKNOWN";
+  const lastFourDigits = parsed.card_last_four?.trim() || "XXXX";
+
+  // Validate and default statement_date
+  let statementDate = parsed.statement_date?.trim();
+  let usedFallback = false;
+  if (!statementDate || isNaN(Date.parse(statementDate))) {
+    statementDate = received_at.split("T")[0];
+    usedFallback = true;
+  } else {
+    try {
+      statementDate = new Date(statementDate).toISOString().split("T")[0];
+    } catch {
+      statementDate = received_at.split("T")[0];
+      usedFallback = true;
+    }
+  }
+
+  // Validate and default due_date
+  let dueDate = parsed.due_date?.trim();
+  if (!dueDate || isNaN(Date.parse(dueDate))) {
+    try {
+      const date = new Date(statementDate);
+      date.setDate(date.getDate() + 20);
+      dueDate = date.toISOString().split("T")[0];
+    } catch {
+      dueDate = statementDate;
+    }
+    usedFallback = true;
+  } else {
+    try {
+      dueDate = new Date(dueDate).toISOString().split("T")[0];
+    } catch {
+      try {
+        const date = new Date(statementDate);
+        date.setDate(date.getDate() + 20);
+        dueDate = date.toISOString().split("T")[0];
+      } catch {
+        dueDate = statementDate;
+      }
+      usedFallback = true;
+    }
+  }
+
   const { data: existingCard } = await admin
     .from("credit_cards")
     .select("id")
     .eq("user_id", user_id)
-    .eq("last_four_digits", parsed.card_last_four)
-    .eq("bank_name", parsed.bank_name)
+    .eq("last_four_digits", lastFourDigits)
+    .eq("bank_name", bankName)
     .maybeSingle();
 
   let cardId: string;
@@ -84,9 +131,9 @@ export async function processEmail(
       .from("credit_cards")
       .insert({
         user_id,
-        bank_name: parsed.bank_name,
+        bank_name: bankName,
         card_network: parsed.card_network,
-        last_four_digits: parsed.card_last_four,
+        last_four_digits: lastFourDigits,
       })
       .select("id")
       .single();
@@ -98,7 +145,7 @@ export async function processEmail(
     await admin.from("notifications").insert({
       user_id,
       title: "New card detected!",
-      message: `We found a ${parsed.bank_name} card (****${parsed.card_last_four}) from your email statements.`,
+      message: `We found a ${bankName} card (****${lastFourDigits}) from your email statements.`,
       type: "new_card",
       related_card_id: cardId,
     });
@@ -108,15 +155,15 @@ export async function processEmail(
     {
       card_id: cardId,
       user_id,
-      statement_date: parsed.statement_date,
-      due_date: parsed.due_date,
+      statement_date: statementDate,
+      due_date: dueDate,
       total_amount: parsed.total_amount,
       minimum_payment: parsed.minimum_payment,
       previous_balance: parsed.previous_balance,
       payment_link: parsed.payment_link,
       source_email_id: gmail_message_id,
       ai_confidence: parsed.confidence,
-      ai_verified: parsed.confidence > 0.8,
+      ai_verified: usedFallback ? false : parsed.confidence > 0.8,
       raw_email_snippet: email_body.substring(0, 500),
     },
     { onConflict: "card_id,statement_date" }
@@ -124,12 +171,12 @@ export async function processEmail(
 
   if (billError) throw billError;
 
-  const dueDate = new Date(parsed.due_date);
-  if (dueDate < new Date()) {
+  const parsedDueDate = new Date(dueDate);
+  if (parsedDueDate < new Date()) {
     await admin.from("notifications").insert({
       user_id,
       title: "Bill overdue!",
-      message: `Your ${parsed.bank_name} (****${parsed.card_last_four}) bill of ₹${parsed.total_amount.toLocaleString()} is overdue.`,
+      message: `Your ${bankName} (****${lastFourDigits}) bill of ₹${parsed.total_amount.toLocaleString()} is overdue.`,
       type: "warning",
       related_card_id: cardId,
     });
@@ -138,7 +185,13 @@ export async function processEmail(
   return {
     success: true,
     message: isNewCard ? "New card created with bill" : "Bill added to existing card",
-    parsed,
+    parsed: {
+      ...parsed,
+      bank_name: bankName,
+      card_last_four: lastFourDigits,
+      statement_date: statementDate,
+      due_date: dueDate,
+    },
     isNewCard,
   };
 }

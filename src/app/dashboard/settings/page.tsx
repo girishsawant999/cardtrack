@@ -8,6 +8,7 @@ import {
   Shield,
   Smartphone,
   User,
+  Cpu,
 } from "lucide-react";
 
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -66,6 +67,12 @@ export default async function SettingsPage() {
     {
       title: "Preferences",
       items: [
+        {
+          icon: Cpu,
+          label: "AI Model Provider",
+          subtitle: `Active: ${(profile as any)?.ai_provider === "grok" ? "Groq AI" : "Gemini AI"}`,
+          href: "/dashboard/settings/ai-provider",
+        },
         {
           icon: Moon,
           label: "Appearance",

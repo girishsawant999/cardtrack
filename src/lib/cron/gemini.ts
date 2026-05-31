@@ -1,5 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { isEncrypted, decryptPDF } from "@pdfsmaller/pdf-decrypt";
+import { execSync } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
 
 export interface ParsedStatement {
   is_credit_card_statement: boolean;
@@ -87,6 +90,57 @@ function getGoogleGenAI(apiKey: string): GoogleGenAI {
   return aiInstance;
 }
 
+// Check if qpdf is available
+let isQpdfAvailable: boolean | null = null;
+function checkQpdf(): boolean {
+  if (isQpdfAvailable !== null) return isQpdfAvailable;
+  try {
+    execSync("which qpdf", { stdio: "ignore" });
+    isQpdfAvailable = true;
+  } catch {
+    isQpdfAvailable = false;
+  }
+  return isQpdfAvailable;
+}
+
+async function decryptPdfWithFallback(pdfBytes: Uint8Array, password: string): Promise<Uint8Array> {
+  try {
+    return await decryptPDF(pdfBytes, password);
+  } catch (err: any) {
+    if (checkQpdf()) {
+      console.log("[gemini] JS PDF decryption failed/unsupported. Trying qpdf fallback...");
+      const tempDir = path.join(process.cwd(), ".tmp");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      const uniqueId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const inputPath = path.join(tempDir, `input_${uniqueId}.pdf`);
+      const outputPath = path.join(tempDir, `output_${uniqueId}.pdf`);
+      
+      try {
+        fs.writeFileSync(inputPath, Buffer.from(pdfBytes));
+        // Escape password for shell execution
+        const escapedPassword = password.replace(/'/g, "'\\''");
+        execSync(`qpdf --password='${escapedPassword}' --decrypt '${inputPath}' '${outputPath}'`, {
+          stdio: "ignore",
+          timeout: 10000
+        });
+        const decryptedBytes = fs.readFileSync(outputPath);
+        console.log("[gemini] Successfully decrypted PDF using qpdf fallback.");
+        return new Uint8Array(decryptedBytes.buffer, decryptedBytes.byteOffset, decryptedBytes.byteLength);
+      } catch (qpdfErr: any) {
+        console.error("[gemini] qpdf fallback decryption failed:", qpdfErr.message);
+        throw err;
+      } finally {
+        try { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); } catch {}
+        try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath); } catch {}
+      }
+    }
+    throw err;
+  }
+}
+
 /**
  * Parse an email body (and optional PDF attachments) with Gemini.
  *
@@ -129,7 +183,7 @@ export async function parseEmailWithGemini(
           const passwordsToTry = pdfPasswords ?? [];
           for (const pwd of passwordsToTry) {
             try {
-              decryptedBytes = await decryptPDF(pdfBytes, pwd);
+              decryptedBytes = await decryptPdfWithFallback(pdfBytes, pwd);
               console.log(`[gemini] Successfully decrypted PDF "${pdf.filename}" using user-provided password.`);
               break;
             } catch (e) {
