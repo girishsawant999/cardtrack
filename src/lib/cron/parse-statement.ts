@@ -36,15 +36,6 @@ export async function processEmail(
     return { success: true, message: "Already processed", skipped: true };
   }
 
-  await admin.from("email_log").insert({
-    user_id,
-    gmail_message_id,
-    subject,
-    sender,
-    received_at,
-    processing_status: "pending",
-  });
-
   const { data: profile } = await admin
     .from("profiles")
     .select("pdf_passwords")
@@ -55,13 +46,16 @@ export async function processEmail(
 
   const parsed = await parseEmailWithGemini(email_body, pdfAttachments, pdfPasswords);
 
-  await admin
-    .from("email_log")
-    .update({
-      processing_status: parsed.is_credit_card_statement ? "processed" : "ignored",
-      processing_result: parsed as unknown as Json,
-    })
-    .eq("gmail_message_id", gmail_message_id);
+  // Gemini API call succeeded. Now insert the email log.
+  await admin.from("email_log").insert({
+    user_id,
+    gmail_message_id,
+    subject,
+    sender,
+    received_at,
+    processing_status: parsed.is_credit_card_statement ? "processed" : "ignored",
+    processing_result: parsed as unknown as Json,
+  });
 
   if (!parsed.is_credit_card_statement) {
     return { success: true, message: "Not a credit card statement", parsed };
