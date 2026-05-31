@@ -1,5 +1,5 @@
-import { type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
+import { type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
   return await updateSession(request);
@@ -15,7 +15,8 @@ export const config = {
      * - public files (icons, images)
      * - sw.js (service worker)
      * - manifest (PWA manifest)
+     * - api/cron (cron routes)
      */
-    "/((?!_next/static|_next/image|favicon.ico|icons/|bank-logos/|sw\\.js|manifest).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icons/|bank-logos/|sw\\.js|manifest|api/cron).*)",
   ],
 };
