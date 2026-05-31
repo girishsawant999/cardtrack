@@ -33,6 +33,11 @@ export default async function SettingsPage() {
   const lastFetched = profile?.email_last_fetched_at
     ? new Date(profile.email_last_fetched_at).toLocaleString()
     : "Never";
+  const fetchSource = profile?.email_last_fetch_source === "cron"
+    ? "auto"
+    : profile?.email_last_fetch_source === "user"
+      ? "manual"
+      : null;
 
   const settingGroups = [
     {
@@ -42,13 +47,19 @@ export default async function SettingsPage() {
           icon: Mail,
           label: "Gmail Connection",
           subtitle: profile?.gmail_connected
-            ? `Last fetched ${lastFetched}`
+            ? `Last synced ${lastFetched}${fetchSource ? ` (${fetchSource})` : ""}`
             : "Not connected — sign in with Google to enable",
           href: "/dashboard/settings/gmail",
           badge: profile?.gmail_connected ? "Connected" : "Pending",
           badgeColor: profile?.gmail_connected
             ? "bg-primary/10 text-primary border-primary/20"
             : "bg-accent/40 text-accent-foreground border-accent/30",
+        },
+        {
+          icon: Shield,
+          label: "Statement Passwords",
+          subtitle: "Passwords or combinations for encrypted PDF statements",
+          href: "/dashboard/settings/passwords",
         },
       ],
     },

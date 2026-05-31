@@ -15,7 +15,7 @@ export async function GET() {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("gmail_connected, email_last_fetched_at")
+    .select("gmail_connected, email_last_fetched_at, email_last_fetch_source")
     .eq("id", user.id)
     .single();
 
@@ -32,6 +32,7 @@ export async function GET() {
   return NextResponse.json({
     gmail_connected: profile.gmail_connected,
     email_last_fetched_at: profile.email_last_fetched_at,
+    email_last_fetch_source: profile.email_last_fetch_source,
     token_present: Boolean(tokenRow),
     token_expires_at: tokenRow?.expires_at ?? null,
     token_updated_at: tokenRow?.updated_at ?? null,

@@ -9,6 +9,7 @@ export interface ParseInput {
   subject: string;
   sender: string;
   received_at: string;
+  pdfAttachments?: Array<{ filename: string; base64urlData: string }>;
 }
 
 export interface ParseResult {
@@ -23,7 +24,7 @@ export async function processEmail(
   admin: SupabaseClient<Database>,
   input: ParseInput
 ): Promise<ParseResult> {
-  const { user_id, email_body, gmail_message_id, subject, sender, received_at } = input;
+  const { user_id, email_body, gmail_message_id, subject, sender, received_at, pdfAttachments } = input;
 
   const { data: existingLog } = await admin
     .from("email_log")
@@ -44,7 +45,15 @@ export async function processEmail(
     processing_status: "pending",
   });
 
-  const parsed = await parseEmailWithGemini(email_body);
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("pdf_passwords")
+    .eq("id", user_id)
+    .maybeSingle();
+
+  const pdfPasswords = profile?.pdf_passwords ?? [];
+
+  const parsed = await parseEmailWithGemini(email_body, pdfAttachments, pdfPasswords);
 
   await admin
     .from("email_log")

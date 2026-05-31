@@ -47,7 +47,7 @@ export async function POST() {
         Authorization: `Bearer ${cronSecret}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ user_id: user.id }),
+      body: JSON.stringify({ user_id: user.id, source: "user" }),
     });
 
     const data = await res.json().catch(() => ({}));

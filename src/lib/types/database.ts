@@ -16,7 +16,9 @@ export interface Database {
           avatar_url: string | null;
           gmail_connected: boolean;
           email_last_fetched_at: string | null;
+          email_last_fetch_source: string | null;
           notification_preferences: Json;
+          pdf_passwords: string[];
           created_at: string;
           updated_at: string;
         };
@@ -26,7 +28,9 @@ export interface Database {
           avatar_url?: string | null;
           gmail_connected?: boolean;
           email_last_fetched_at?: string | null;
+          email_last_fetch_source?: string | null;
           notification_preferences?: Json;
+          pdf_passwords?: string[];
           created_at?: string;
           updated_at?: string;
         };
@@ -36,7 +40,9 @@ export interface Database {
           avatar_url?: string | null;
           gmail_connected?: boolean;
           email_last_fetched_at?: string | null;
+          email_last_fetch_source?: string | null;
           notification_preferences?: Json;
+          pdf_passwords?: string[];
           created_at?: string;
           updated_at?: string;
         };
