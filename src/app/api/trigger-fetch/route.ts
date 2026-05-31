@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 
@@ -51,6 +51,25 @@ export async function POST() {
     });
 
     const data = await res.json().catch(() => ({}));
+
+    // Trigger process-queue asynchronously in the background from the main handler
+    after(async () => {
+      try {
+        console.log(`[trigger-fetch] Triggering background queue processing...`);
+        const procUrl = `${baseUrl.replace(/\/$/, "")}/api/cron/process-queue`;
+        await fetch(procUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${cronSecret}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ user_id: user.id }),
+        });
+      } catch (bgErr) {
+        console.error(`[trigger-fetch] Error triggering background queue processing:`, bgErr);
+      }
+    });
+
     return NextResponse.json(data, { status: res.status });
   } catch (err) {
     return NextResponse.json(

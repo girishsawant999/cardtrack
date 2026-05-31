@@ -208,7 +208,10 @@ export interface Database {
           received_at: string | null;
           processing_status: string;
           processing_result: Json | null;
+          error_message: string | null;
+          retries: number;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -219,7 +222,10 @@ export interface Database {
           received_at?: string | null;
           processing_status?: string;
           processing_result?: Json | null;
+          error_message?: string | null;
+          retries?: number;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
@@ -230,7 +236,10 @@ export interface Database {
           received_at?: string | null;
           processing_status?: string;
           processing_result?: Json | null;
+          error_message?: string | null;
+          retries?: number;
           created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };
