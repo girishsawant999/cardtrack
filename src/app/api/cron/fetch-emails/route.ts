@@ -207,6 +207,9 @@ export async function POST(req: Request) {
             `[fetch-emails] User ${profile.id}: Failed to process message ${message.id} (subject="${subject}"):`,
             processErr instanceof Error ? processErr.message : processErr
           );
+        } finally {
+          // Explicitly clear references to large PDF base64 buffers to release heap memory immediately
+          pdfAttachments.length = 0;
         }
       }
 

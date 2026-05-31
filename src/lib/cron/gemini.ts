@@ -78,6 +78,15 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64");
 }
 
+let aiInstance: GoogleGenAI | null = null;
+
+function getGoogleGenAI(apiKey: string): GoogleGenAI {
+  if (!aiInstance) {
+    aiInstance = new GoogleGenAI({ apiKey });
+  }
+  return aiInstance;
+}
+
 /**
  * Parse an email body (and optional PDF attachments) with Gemini.
  *
@@ -93,7 +102,7 @@ export async function parseEmailWithGemini(
   const geminiApiKey = process.env.GEMINI_API_KEY;
   if (!geminiApiKey) throw new Error("GEMINI_API_KEY not configured");
 
-  const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+  const ai = getGoogleGenAI(geminiApiKey);
 
   // Build the contents array for the request
   const contents: Array<
@@ -107,49 +116,59 @@ export async function parseEmailWithGemini(
   // Add PDF attachments as inline data (Gemini supports PDF natively)
   if (pdfAttachments?.length) {
     for (const pdf of pdfAttachments) {
-      const pdfBytes = base64ToUint8Array(pdf.base64urlData);
-      const encryptionInfo = await isEncrypted(pdfBytes);
-      
-      let finalBase64 = pdf.base64urlData;
-
-      if (encryptionInfo.encrypted) {
-        console.log(`[gemini] PDF "${pdf.filename}" is password-protected. Attempting decryption...`);
-        let decryptedBytes: Uint8Array | null = null;
+      try {
+        let pdfBytes: Uint8Array | null = base64ToUint8Array(pdf.base64urlData);
+        const encryptionInfo = await isEncrypted(pdfBytes);
         
-        const passwordsToTry = pdfPasswords ?? [];
-        for (const pwd of passwordsToTry) {
-          try {
-            decryptedBytes = await decryptPDF(pdfBytes, pwd);
-            console.log(`[gemini] Successfully decrypted PDF "${pdf.filename}" using user-provided password.`);
-            break;
-          } catch (e) {
-            // Password failed, try the next one
+        let finalBase64 = pdf.base64urlData;
+
+        if (encryptionInfo.encrypted) {
+          console.log(`[gemini] PDF "${pdf.filename}" is password-protected. Attempting decryption...`);
+          let decryptedBytes: Uint8Array | null = null;
+          
+          const passwordsToTry = pdfPasswords ?? [];
+          for (const pwd of passwordsToTry) {
+            try {
+              decryptedBytes = await decryptPDF(pdfBytes, pwd);
+              console.log(`[gemini] Successfully decrypted PDF "${pdf.filename}" using user-provided password.`);
+              break;
+            } catch (e) {
+              // Password failed, try the next one
+            }
           }
+
+          if (!decryptedBytes) {
+            console.warn(
+              `[gemini] PDF "${pdf.filename}" is password-protected and decryption failed. Skipping attachment, falling back to email body content only.`
+            );
+            pdfBytes = null;
+            continue;
+          }
+
+          finalBase64 = uint8ArrayToBase64(decryptedBytes);
+          decryptedBytes = null; // Free memory reference
+        } else {
+          // If not encrypted, standardize the encoding
+          finalBase64 = base64UrlToBase64(pdf.base64urlData);
         }
 
-        if (!decryptedBytes) {
-          console.warn(
-            `[gemini] PDF "${pdf.filename}" is password-protected and decryption failed. Skipping attachment, falling back to email body content only.`
-          );
-          continue;
-        }
+        pdfBytes = null; // Free memory reference
 
-        finalBase64 = uint8ArrayToBase64(decryptedBytes);
-      } else {
-        // If not encrypted, standardize the encoding
-        finalBase64 = base64UrlToBase64(pdf.base64urlData);
+        console.log(
+          `[gemini] Attaching PDF: ${pdf.filename} (${Math.round((finalBase64.length * 0.75) / 1024)}KB)`
+        );
+        
+        contents.push({
+          inlineData: {
+            mimeType: "application/pdf",
+            data: finalBase64,
+          },
+        });
+      } catch (pdfErr) {
+        console.warn(
+          `[gemini] Failed to process PDF "${pdf.filename}": ${pdfErr instanceof Error ? pdfErr.message : pdfErr}. Skipping attachment, falling back to email body content only.`
+        );
       }
-
-      console.log(
-        `[gemini] Attaching PDF: ${pdf.filename} (${Math.round((finalBase64.length * 0.75) / 1024)}KB)`
-      );
-      
-      contents.push({
-        inlineData: {
-          mimeType: "application/pdf",
-          data: finalBase64,
-        },
-      });
     }
   }
 
